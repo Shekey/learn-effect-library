@@ -63,7 +63,8 @@ export default function Home() {
         <p className="lead">
           A small todo app built with one <code>HttpApi</code> contract: typed server, typed browser client, generated docs, Postgres
           (or in-memory) storage, queue workers, a scheduled job and a live feed. <a href="/todos">Open /todos →</a>{" "}
-          <a href="/api/v2/docs" target="_blank">API docs</a>
+          <a href="/api/v2/docs" target="_blank">API docs</a>{" "}
+          <a href="/todos-tea">Same page as The Elm Architecture →</a>
         </p>
       </section>
 
