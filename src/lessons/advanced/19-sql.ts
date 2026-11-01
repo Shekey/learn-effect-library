@@ -14,11 +14,23 @@
 //   sql.withTransaction(effect)       -> everything inside joins automatically; failure/interrupt = ROLLBACK
 //   Migrator                          -> migrations are Effects, run once, recorded in effect_sql_migrations
 // DON'T: catch SqlError everywhere. Decide once, in the adapter: here it becomes a defect (todoRepositorySql.ts).
+//
+// HAND-WRITTEN vs DERIVED (adapter #2 todoRepositorySql.ts vs adapter #3 todoRepositorySqlModel.ts):
+//   | aspect              | hand-written sql`...`              | Model.Class + SqlModel.makeRepository     |
+//   |---------------------|------------------------------------|-------------------------------------------|
+//   | CRUD by id          | you write every INSERT/UPDATE      | derived: insert/update/findById/delete    |
+//   | insert vs row shape | implied by the SQL text            | explicit variants (id not in `insert`)    |
+//   | custom queries      | natural (NOT completed, joins)     | still need sql`...` next to the repo      |
+//   | round trips         | one UPDATE ... RETURNING           | toggle = findById + update (two)          |
+//   | learning value      | you see the SQL Postgres runs      | less code, more "magic"                   |
+//   Pick DERIVED for boring single-table CRUD with many columns. Pick HAND-WRITTEN for set-based updates,
+//   joins, reporting, or when every round trip counts. Mixing both in one adapter is normal (adapter #3 does).
 import { Config, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import { TodoRepository } from "../../features/todos/domain/todoRepository"
 import { TodoRepositoryMemory } from "../../features/todos/infrastructure/todoRepositoryMemory"
 import { MigrationsLive, PgLive, TodoRepositorySqlNoDeps } from "../../features/todos/infrastructure/todoRepositorySql"
+import { TodoRepositorySqlModelNoDeps } from "../../features/todos/infrastructure/todoRepositorySqlModel"
 
 const section = (title: string) => Effect.sync(() => console.log(`\n── ${title} ──`))
 
@@ -96,6 +108,13 @@ export const main = Effect.gen(function*() {
     Effect.provide(PgRepo),
     Effect.catchTag("SqlError", (e) =>
       Effect.sync(() => console.log(`Could not reach Postgres (${e.message}). Did you run \`pnpm db:up\`?`))),
+  )
+
+  // Adapter #3: derived from a Model. SAME program, SAME port, only the Layer changed again.
+  yield* section("Effect way, SAME program on the derived adapter (Model.Class + SqlModel.makeRepository)")
+  yield* usingThePort.pipe(
+    Effect.provide(TodoRepositorySqlModelNoDeps.pipe(Layer.provide(MigrationsLive.pipe(Layer.provideMerge(PgLive))))),
+    Effect.catchTag("SqlError", (e) => Effect.sync(() => console.log(`Could not reach Postgres (${e.message}).`))),
   )
   // The pool is closed here automatically: PgLive is a scoped Layer (lesson 13).
 })
