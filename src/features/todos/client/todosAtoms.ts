@@ -13,7 +13,7 @@
 //   - mutations carry `reactivityKeys`; every query tagged with the same key refreshes itself
 // DON'T: put atoms inside components (they are module-level definitions, like routes), or call fetch by hand.
 // ─────────────────────────────────────────────────────────────────────────────
-import { Effect, Queue, Schema, Stream } from "effect"
+import { Effect, Option, Queue, Schema, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Atom, AtomHttpApi } from "effect/reactivity"
 import { TodosApi } from "../api/TodosApi"
@@ -43,16 +43,39 @@ export const todoByIdAtom = Atom.family((id: number) =>
 
 // LIVE FEED: an atom built from a Stream. The browser's EventSource is wrapped in Stream.callback; the
 // finalizer closes it when no component reads the atom any more (navigate away -> connection closed).
-const decodeEvent = Schema.decodeUnknownSync(Schema.fromJsonString(TodoEvent))
-const serverEvents = Stream.callback<TodoEvent>((queue) =>
+//
+// PROBLEM (regular way): decoding with Schema.decodeUnknownSync inside `source.onmessage`. A malformed or
+// newer event THROWS inside a browser callback, outside any fiber: untyped, not logged by Effect, and the
+// Stream never hears about it.
+// EFFECT WAY: never throw inside callbacks you hand to Stream.callback. Move the RAW string into Effect
+// first (the queue), then validate inside the Stream with Schema.decodeUnknownEffect.
+// CHOICE: a bad frame is LOGGED and SKIPPED (Effect.option), so one weird event doesn't kill the whole
+// feed. A connection error (`onerror`) ENDS the stream, so the atom can be re-read/retried.
+// DON'T: call decodeUnknownSync (or anything else that can throw) inside onmessage.
+const decodeEvent = Schema.decodeUnknownEffect(Schema.fromJsonString(TodoEvent))
+const rawServerEvents = Stream.callback<string>((queue) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const source = new EventSource("/api/v2/events")
-      source.onmessage = (msg) => Queue.offerUnsafe(queue, decodeEvent(msg.data))
+      source.onmessage = (msg) => Queue.offerUnsafe(queue, String(msg.data))
+      source.onerror = () => {
+        source.close()
+        Queue.endUnsafe(queue)
+      }
       return source
     }),
     (source) => Effect.sync(() => source.close()),
   ),
+)
+const serverEvents = rawServerEvents.pipe(
+  Stream.mapEffect((raw) =>
+    decodeEvent(raw).pipe(
+      Effect.tapError((error) => Effect.logWarning("Skipping malformed SSE frame", raw, error)),
+      Effect.option,
+    ),
+  ),
+  Stream.filter(Option.isSome),
+  Stream.map((some) => some.value),
 )
 // Stream.scan keeps the latest 12 events, newest first. The atom's value updates on every element.
 export const liveEventsAtom = Atom.make(
