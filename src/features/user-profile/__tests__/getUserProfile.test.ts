@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "@effect/vitest"
 import { canViewProfile, toProfile } from "../domain/profile"
 import { NotFoundError } from "../effect/domain/errors"
 import { UserRepository } from "../effect/domain/userRepository"
@@ -35,22 +35,25 @@ describe("effect: swap a Layer, use case untouched", () => {
     getPosts: () => Effect.succeed(posts),
   }))
 
-  it("builds a profile", async () => {
-    const result = await Effect.runPromise(getUserProfileEffect(1).pipe(Effect.provide(FakeRepo)))
-    expect(result).toEqual({ displayName: "ADA", postCount: 1, level: "newbie" })
-  })
+  // EFFECT WAY: `it.effect` runs the Effect for us (no runPromise), and a failure prints the full Cause.
+  it.effect("builds a profile", () =>
+    Effect.gen(function*() {
+      const result = yield* getUserProfileEffect(1).pipe(Effect.provide(FakeRepo))
+      expect(result).toEqual({ displayName: "ADA", postCount: 1, level: "newbie" })
+    }))
 
-  it("fails with a typed UserBannedError for banned users", async () => {
+  it.effect("fails with a typed UserBannedError for banned users", () => Effect.gen(function*() {
     const Banned = Layer.succeed(UserRepository, UserRepository.of({
       getUser: () => Effect.succeed({ ...user, status: "banned" as const }),
       getPosts: () => Effect.succeed(posts),
     }))
-    const error = await Effect.runPromise(getUserProfileEffect(1).pipe(Effect.provide(Banned), Effect.flip))
+    const error = yield* getUserProfileEffect(1).pipe(Effect.provide(Banned), Effect.flip)
     expect(error._tag).toBe("UserBannedError")
-  })
+  }))
 
-  it("fails with a typed NotFoundError", async () => {
-    const error = await Effect.runPromise(getUserProfileEffect(2).pipe(Effect.provide(FakeRepo), Effect.flip))
-    expect(error._tag).toBe("NotFoundError")
-  })
+  it.effect("fails with a typed NotFoundError", () =>
+    Effect.gen(function*() {
+      const error = yield* getUserProfileEffect(2).pipe(Effect.provide(FakeRepo), Effect.flip)
+      expect(error._tag).toBe("NotFoundError")
+    }))
 })
