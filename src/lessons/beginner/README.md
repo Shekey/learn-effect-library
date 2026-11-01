@@ -27,3 +27,5 @@ in that order. Show the pain, then the fix. The "regular" code is in the same fi
 Suggested slide order: 01 -> 02 -> 04 -> 05 -> 06 -> 03 (fn/pipe last, it is style rather than concept).
 
 Avoid on beginner slides: Layers building on Layers, Schema transforms, fibers, Scope. They come later.
+
+Next: [`docs/concepts/`](../../../docs/concepts/README.md) explains the bigger ideas (streams, concurrency, errors, layers) before the intermediate and advanced lessons.
