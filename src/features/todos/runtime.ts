@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { Config, Effect, Layer, ManagedRuntime, Option } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
+import { makeAppSingleton } from "@/lib/effect/makeAppRuntime"
 import { HttpApiBuilder, HttpApiScalar } from "effect/http-api"
 import { TodosApi } from "./api/TodosApi"
 import { TodosApiLive } from "./api/TodosApiLive"
@@ -56,12 +57,16 @@ type Built = {
   web: { handler: (request: Request) => Promise<Response>; dispose: () => Promise<void> }
 }
 
-// Cached on globalThis for Next dev hot reload (see user-profile/effect/runtime.ts for the trade-off).
-// Without it every edit would start ANOTHER set of worker fibers and another Postgres pool.
-const g = globalThis as unknown as { __todosApp?: Built }
-const build = (): Built => {
+// Cached on globalThis for Next dev hot reload via makeAppSingleton (trade-off: src/lib/effect/makeAppRuntime.ts).
+// When this wiring changes, the previous web handler AND runtime are disposed, so the old worker fibers and
+// Postgres pool shut down instead of leaking. Web handler first: it borrows layers from the runtime's MemoMap.
+const build = (): Built & { dispose: () => Promise<void> } => {
   const runtime = ManagedRuntime.make(TodosServicesLive)
   const web = HttpRouter.toWebHandler(RoutesLive, { memoMap: runtime.memoMap, disableLogger: true })
-  return { runtime, web: { handler: (req) => web.handler(req), dispose: web.dispose } }
+  return {
+    runtime,
+    web: { handler: (req) => web.handler(req), dispose: web.dispose },
+    dispose: () => web.dispose().finally(() => runtime.dispose()),
+  }
 }
-export const todosApp = (g.__todosApp ??= build())
+export const todosApp: Built = makeAppSingleton("todos", RoutesLive, build)

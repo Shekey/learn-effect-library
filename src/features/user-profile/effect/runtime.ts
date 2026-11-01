@@ -1,4 +1,5 @@
-import { Effect, Layer, ManagedRuntime } from "effect"
+import { Effect, Layer } from "effect"
+import { makeAppRuntime } from "@/lib/effect/makeAppRuntime"
 import { FetchHttpClient } from "effect/http"
 import type { UserRepository } from "./domain/userRepository"
 import { TelemetryLayer } from "./infrastructure/telemetry"
@@ -21,12 +22,10 @@ export const AppLayer = UserRepositoryCached.pipe(
   Layer.provideMerge(TelemetryLayer),
 )
 
-// Next.js dev reloads modules on every edit; without this cache each reload would build a NEW runtime
-// (new cache, new exporters, leaked background fibers). Stash it on globalThis in dev.
-// TRADE-OFF: edits to the Layer wiring below are NOT picked up by hot reload. Restart `pnpm dev` after changing it.
+// Next.js dev reloads modules on every edit. makeAppRuntime caches the runtime on globalThis and disposes the
+// previous one when this wiring changes (and on SIGTERM). See src/lib/effect/makeAppRuntime.ts for the trade-off.
 type AppServices = UserRepository | UpstreamHttp
-const globalForRuntime = globalThis as unknown as { __appRuntime?: ManagedRuntime.ManagedRuntime<AppServices, unknown> }
-const runtime = (globalForRuntime.__appRuntime ??= ManagedRuntime.make(AppLayer))
+const runtime = makeAppRuntime("user-profile", AppLayer)
 
 // WHERE Effect meets the outside world: the ONLY place we call `runPromise`.
 // DON'T call runPromise deep inside business code: you lose typed errors, DI, and interruption.
