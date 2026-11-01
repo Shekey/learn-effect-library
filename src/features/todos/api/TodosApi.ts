@@ -13,6 +13,7 @@
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { TodoNotFound } from "../domain/errors"
+import { Authorization, User } from "./auth"
 import { CreateTodo, Todo, TodoId } from "../domain/todo"
 
 export class TodosGroup extends HttpApiGroup.make("todos")
@@ -36,6 +37,10 @@ export class TodosGroup extends HttpApiGroup.make("todos")
       success: Todo,
       error: TodoNotFound,
     }),
+    // PROTECTED: only this endpoint runs the Authorization middleware (api/auth.ts). No/invalid token ->
+    // typed 401 `Unauthorized`. The other endpoints stay public (the existing demo and tests call them
+    // without a token). Try it: remove `.middleware(Authorization)` -> the `me` handler no longer compiles.
+    HttpApiEndpoint.get("me", "/me", { success: User }).middleware(Authorization),
   )
   .prefix("/todos")
   .annotateMerge(OpenApi.annotations({ title: "Todos", description: "A tiny CRUD API, fully typed end to end" })) {}

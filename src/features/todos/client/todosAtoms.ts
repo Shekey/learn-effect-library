@@ -16,6 +16,7 @@
 import { Effect, Queue, Schema, Stream } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { Atom, AtomHttpApi } from "effect/reactivity"
+import { withDemoToken } from "../api/auth"
 import { TodosApi } from "../api/TodosApi"
 import { TodoId } from "../domain/todo"
 import { TodoEvent } from "../domain/todoEvents"
@@ -26,6 +27,8 @@ export class TodosClient extends AtomHttpApi.Service<TodosClient>()("TodosClient
   api: TodosApi,
   httpClient: FetchHttpClient.layer,
   baseUrl: typeof window === "undefined" ? "http://localhost:3000" : window.location.origin,
+  // Every request carries `Authorization: Bearer demo-token`, so protected endpoints (todos.me) succeed.
+  transformClient: withDemoToken,
 }) {}
 
 // A QUERY atom. Anything reading it gets AsyncResult<ReadonlyArray<Todo>, ...>.
