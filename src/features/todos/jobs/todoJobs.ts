@@ -15,7 +15,7 @@
 //   - `Effect.retry(Schedule...)` and `Effect.repeat(Schedule...)` are data, so tests drive them with TestClock.
 // DON'T: use `forkDetach` for app jobs (nothing would stop them), or an unbounded queue for user-driven input.
 // ─────────────────────────────────────────────────────────────────────────────
-import { Config, Effect, Layer, Queue, Schedule, Stream } from "effect"
+import { Config, Effect, Layer, Queue, Ref, Schedule, Stream } from "effect"
 import type { Todo } from "../domain/todo"
 import { TodoEvents } from "../domain/todoEvents"
 import { TodoRepository } from "../domain/todoRepository"
@@ -45,11 +45,26 @@ export const NotificationWorkers = Layer.effectDiscard(
     const worker = (n: number) =>
       Effect.gen(function*() {
         const todo = yield* Queue.take(queue)
-        let attempt = 0
-        yield* Effect.suspend(() => (attempt++, notifier.send(todo))).pipe(
+        // Attempt counter as a `Ref`, created fresh for EACH job (it lives inside this per-job generator).
+        // PROBLEM (regular way): `let attempt = 0` + `Effect.suspend(() => (attempt++, send()))`. It works, but
+        //   it hides a side effect inside a thunk, relies on `suspend` re-running it on every retry, and is not
+        //   safe if the effect is ever shared between fibers.
+        // EFFECT WAY: `Ref.update` is itself an Effect, so "count, then send" is an ordinary pipeline that
+        //   `Effect.retry` re-runs as a whole. The state change is explicit, typed, and fiber-safe.
+        // DON'T: hoist the Ref outside the job: then the count would leak from one todo into the next.
+        const attempts = yield* Ref.make(0)
+        yield* Ref.update(attempts, (k) => k + 1).pipe(
+          Effect.andThen(notifier.send(todo)),
           Effect.retry(notifyRetryPolicy),
-          Effect.andThen(() => events.publish({ _tag: "NotificationSent", todoId: todo.id, attempt })),
-          Effect.catch((e) => Effect.logWarning(`worker ${n}: giving up on todo #${e.todoId} after ${attempt} attempts`)),
+          Effect.andThen(Ref.get(attempts)),
+          Effect.andThen((attempt) => events.publish({ _tag: "NotificationSent", todoId: todo.id, attempt })),
+          Effect.catch((e) =>
+            Ref.get(attempts).pipe(
+              Effect.andThen((attempt) =>
+                Effect.logWarning(`worker ${n}: giving up on todo #${e.todoId} after ${attempt} attempts`)
+              ),
+            )
+          ),
           Effect.withSpan("NotificationWorker.job", { attributes: { worker: n, todoId: todo.id } }),
         )
       }).pipe(Effect.forever)
