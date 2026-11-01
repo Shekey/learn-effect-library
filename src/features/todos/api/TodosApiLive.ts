@@ -8,11 +8,25 @@
 // Try it: delete the `toggle` handler below -> compile error "missing toggle". Return `{ id: 1 }` from
 // `create` -> compile error, `title` and `completed` are missing.
 // ─────────────────────────────────────────────────────────────────────────────
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { HttpApiBuilder } from "effect/http-api"
 import { TodoEvents } from "../domain/todoEvents"
 import { TodoRepository } from "../domain/todoRepository"
+import { Authorization, CurrentUser, verifyToken } from "./auth"
 import { TodosApi } from "./TodosApi"
+
+// SERVER implementation of the Authorization middleware (kept out of auth.ts so it never reaches the browser).
+// `credential` is already decoded from `Authorization: Bearer ...`. On success we PROVIDE CurrentUser to the
+// rest of the request; on failure the typed Unauthorized becomes a 401.
+export const AuthorizationLive = Layer.succeed(
+  Authorization,
+  Authorization.of({
+    bearer: Effect.fn(function*(httpEffect, { credential }) {
+      const user = yield* verifyToken(credential)
+      return yield* Effect.provideService(httpEffect, CurrentUser, user)
+    }),
+  }),
+)
 
 // The handlers need TodoRepository + TodoEvents but do not say WHICH implementation. That is decided in
 // infrastructure/runtime.ts (Postgres or memory) and in tests (always memory).
@@ -35,6 +49,11 @@ export const TodosApiLive = HttpApiBuilder.group(
         ),
       toggle: ({ params }) =>
         repo.toggle(params.id).pipe(Effect.tap((todo) => events.publish({ _tag: "TodoToggled", todo }))),
+      // Needs CurrentUser. Compiles ONLY because `me` declares `.middleware(Authorization)` in TodosApi.ts.
+      me: () => Effect.gen(function*() { return yield* CurrentUser }),
     })
   }),
+).pipe(
+  // The auth Layer is provided HERE (provideMerge: HttpApiBuilder also needs it as an output), so runtime.ts, tests and lesson 18 need no changes.
+  Layer.provideMerge(AuthorizationLive),
 )
