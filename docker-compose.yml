@@ -1,0 +1,40 @@
+# Local infrastructure. Everything here is optional: the app works without Docker (in-memory todos, console traces).
+#
+#   pnpm db:up          start Postgres only (todos persist across restarts)  -> then `pnpm dev`
+#   pnpm db:psql        open a SQL shell inside the container
+#   pnpm db:reset       wipe the database volume and start fresh
+#   pnpm telemetry:up   start Grafana + Tempo + Loki (traces/logs)            -> then `pnpm dev:otel`
+#   pnpm infra:down     stop everything
+services:
+  # Telemetry stack: Grafana + Tempo (traces) + Loki (logs) + Prometheus (metrics) in ONE container.
+  # Open http://localhost:3001 (Explore -> Tempo / Loki)
+  lgtm:
+    image: grafana/otel-lgtm:0.11.0
+    ports:
+      - "3001:3000" # Grafana UI (3000 is taken by Next.js)
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP  <- the app exports here
+    volumes:
+      - lgtm-data:/data
+
+  # Postgres for the todos feature (src/features/todos). Migrations run automatically when the app starts.
+  # Connection string (also in .env.example): postgres://effect:effect@localhost:5432/todos
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: effect
+      POSTGRES_PASSWORD: effect
+      POSTGRES_DB: todos
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck: # `pnpm db:up` waits until this passes, so the app never races a booting database
+      test: ["CMD-SHELL", "pg_isready -U effect -d todos"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  lgtm-data:
+  pg-data:
