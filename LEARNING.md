@@ -27,6 +27,22 @@ Stop with `pnpm telemetry:down` / `pnpm db:down` (or `pnpm infra:down` for both)
 
 ## The path
 
+**Rule for this repo: concept doc -> lesson -> app feature, in that order.** Understand the idea, see it in a small
+runnable lesson, then read (or build) the real feature. New features follow the same order.
+
+### Step 0: concepts (read as you go)
+
+Short plain-language docs in [`docs/concepts/`](./docs/concepts/README.md). Read each one right before the lessons it prepares for.
+
+| Concept doc | Read before |
+|---|---|
+| [01 Streaming](./docs/concepts/01-streaming.md) | lessons 15, 22, 24 |
+| [02 Backpressure](./docs/concepts/02-backpressure.md) | lessons 20, 23, 24 |
+| [03 Concurrency](./docs/concepts/03-concurrency.md) | lessons 11, 12, 13 |
+| [04 Errors and Cause](./docs/concepts/04-errors-and-cause.md) | lessons 07, 25 |
+| [05 Layers and memoization](./docs/concepts/05-layers-and-memoization.md) | lessons 08, 26 |
+| [06 Atoms vs TEA](./docs/concepts/06-atoms-vs-tea.md) | step 6 (`/todos` vs `/todos-tea`) |
+
 ### Step 1: the mental model (15 min). Run the lessons
 
 Lessons are grouped by level. `pnpm lesson` lists them; `pnpm lesson 02` runs one. Read the file first, run it second.
@@ -72,6 +88,16 @@ Each level folder has a `README.md` with talking points and a demo order (good f
 | 19 | `sql` | `any[]` rows, SQL injection, hand-rolled BEGIN/COMMIT/ROLLBACK. Typed rows, auto-joined transactions, migrations, Layer swap (needs `pnpm db:up`) |
 | 20 | `queue-pubsub-schedule` | Unbounded arrays, EventEmitters, `setInterval` leaks. Backpressure, fan-out, scheduled jobs tied to a Scope |
 | 21 | `testclock` | Slow/flaky tests of retries, timeouts and cron. 7s of backoff + 2 days of cron tested in ~40ms |
+
+**Deep dives** (`src/lessons/advanced/`, each pairs with a concept doc from step 0):
+
+| # | Lesson | Problem it solves |
+|---|---|---|
+| 22 | `streaming-101` | What a stream is: pull vs push, lazy, chunks, hot vs cold ([doc 01](./docs/concepts/01-streaming.md)) |
+| 23 | `backpressure` | A fast producer and a slow consumer: buffers and strategies ([doc 02](./docs/concepts/02-backpressure.md)) |
+| 24 | `stream-toolbox` | Real stream operators on a CSV import; the app version is `/csv-import` |
+| 25 | `errors-and-cause` | Failures vs defects vs interruption, reading a `Cause` ([doc 04](./docs/concepts/04-errors-and-cause.md)) |
+| 26 | `layer-memoization` | When a Layer is built once vs twice, `MemoMap`, `Layer.fresh` ([doc 05](./docs/concepts/05-layers-and-memoization.md)) |
 
 ### Step 2: read the real feature, standard vs Effect (30 min)
 
@@ -168,6 +194,14 @@ typed client also refuses to send a payload the schema rejects.
 | **ManagedRuntime** | Builds your Layers once and lets non-Effect code (Next.js) run Effects |
 | **Request / RequestResolver** | Data describing a lookup + the code that answers many at once |
 | **Stream** | A lazy, pull-based sequence of values with backpressure |
+| **Backpressure** | The consumer sets the pace: a slow consumer makes the producer wait instead of piling up memory |
+| **Hot / cold stream** | Cold: produces only when pulled, each consumer gets its own run. Hot: produces anyway (events, PubSub), late subscribers miss values |
+| **Chunk** | An immutable batch of values; streams move chunks, not single items, for speed |
+| **Sink** | The consuming end of a stream: how values are folded/collected/written (`Stream.run(stream, sink)`) |
+| **Buffer strategy** | What a full bounded buffer does: suspend the producer (backpressure), drop new values (dropping) or drop old ones (sliding) |
+| **Structured concurrency** | Child fibers live inside their parent: when the parent ends or is interrupted, the children are too. No orphan work |
+| **Cause** | The full story of why an Effect failed: typed failures, defects, interruptions, possibly several at once |
+| **MemoMap** | The cache used while building Layers so the same Layer value is built once and shared (`Layer.fresh` opts out) |
 | **HttpApi** | A schema-first API contract; server handlers, typed client and OpenAPI are derived from it |
 | **SqlClient** | The `sql` tagged template; values are always bind parameters; `withTransaction` nests as savepoints |
 | **Queue / PubSub** | Queue: each item to ONE consumer (work sharing). PubSub: each item to EVERY subscriber (fan-out) |

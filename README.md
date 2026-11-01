@@ -3,6 +3,8 @@
 Feature: build a user **profile** from two upstream calls (user + posts). The "upstream" is a flaky Next route (`/api/upstream/*`).
 Try it: `pnpm dev` → http://localhost:3000 (use port 3000, or set `UPSTREAM_URL`). `pnpm test` / `pnpm test:watch` for tests.
 **New here? Start with [LEARNING.md](./LEARNING.md)** (guided path, glossary, use/don't-use cheat sheet) and run `pnpm lesson`.
+Concept docs (streaming, backpressure, concurrency, errors, layers, atoms vs TEA): [docs/concepts/](./docs/concepts/README.md).
+Rule for this repo: **concept doc -> lesson -> app feature**, in that order, for every new feature.
 Telemetry: `pnpm telemetry:up` then `pnpm dev:otel`, open Grafana at http://localhost:3001 (Explore → Tempo/Loki).
 Full-stack demo: http://localhost:3000/todos (HttpApi + typed client, Effect Atom, Queue/PubSub/Schedule). For real
 Postgres: `cp .env.example .env.local && pnpm db:up`, then `pnpm dev` (without it, todos are kept in memory).
@@ -19,8 +21,9 @@ src/features/todos/
   domain/ · api/ (HttpApi contract + handlers) · infrastructure/ (Postgres | memory, migrations)
   jobs/ (Queue workers, Schedule) · client/ (atoms) · runtime.ts · __tests__/
 src/app/api/v2/[...path]   the whole todos API (+ /api/v2/docs, /api/v2/openapi.json); /api/v2/events = live SSE
-src/app/todos              React page using Effect Atom
-src/lessons/{beginner,intermediate,advanced}/ 21 runnable lessons: `pnpm lesson 02` (see each folder's README)
+src/app/todos              React page using Effect Atom (/todos-tea: same app Elm-style, /csv-import: streams)
+docs/concepts/                               plain-language concept docs, read before the matching lesson
+src/lessons/{beginner,intermediate,advanced}/ 26 runnable lessons: `pnpm lesson 02` (see each folder's README)
 docker-compose.yml                           Grafana + Tempo + Loki (OTLP on :4318), Postgres 17 (:5432)
 ```
 Data flow: upstream wire JSON (snake_case) → *infrastructure maps to* domain `User/Post` → *application* applies rules → `Profile` → *API edge maps to* `ProfileDto`.

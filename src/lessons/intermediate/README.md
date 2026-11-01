@@ -26,3 +26,5 @@ Suggested slide order: 07 -> 08 -> 09 -> 10 -> 11.
 
 Presenter tip: lesson 09 ends with `decodeTo` (wire format to domain). Mark it optional if time is short.
 See it in the real code: `src/features/user-profile/effect/` (errors, repository port, adapters).
+
+Concept docs to read alongside: [03 Concurrency](../../../docs/concepts/03-concurrency.md) (lesson 11), [04 Errors and Cause](../../../docs/concepts/04-errors-and-cause.md) (lesson 07), [05 Layers and memoization](../../../docs/concepts/05-layers-and-memoization.md) (lesson 08).
