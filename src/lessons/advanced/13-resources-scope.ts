@@ -1,5 +1,7 @@
 // LESSON 13 (advanced): Resources and Scope (cleanup that cannot be forgotten)
 //
+// CONCEPTS FIRST: docs/concepts/03-concurrency.md (event loop, fibers, structured concurrency, Scope)
+//
 // PROBLEM: connections, timers, file handles, background loops must be closed on success, failure, timeout AND
 //   cancellation. try/finally covers some of it, and it is easy to miss a path or leak a timer.
 // EFFECT WAY: acquire a resource inside a Scope with its release attached. When the Scope closes

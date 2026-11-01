@@ -1,5 +1,7 @@
 // LESSON 12 (advanced): Fibers and Semaphores.
 //
+// CONCEPTS FIRST: docs/concepts/03-concurrency.md (event loop, fibers, structured concurrency, Scope)
+//
 // A FIBER is a lightweight thread of Effect work. `Effect.forkChild` starts one in the background and gives you
 // a handle; `Fiber.join` waits for it, `Fiber.interrupt` cancels it. Fibers form a tree: if the parent ends,
 // its children are interrupted. No orphaned background work.

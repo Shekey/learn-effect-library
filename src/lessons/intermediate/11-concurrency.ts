@@ -1,5 +1,7 @@
 // LESSON 11 (intermediate): Concurrency: all, forEach, race, interruption (semaphores: lesson 12)
 //
+// CONCEPTS FIRST: docs/concepts/03-concurrency.md (event loop, fibers, structured concurrency, Scope)
+//
 // PROBLEM: Promise.all keeps the other promises running when one fails; Promise.race can't cancel the loser;
 //   nothing limits how many run at once.
 // EFFECT WAY: effects run on lightweight FIBERS that form a tree. If one child fails (in `all`) or loses
