@@ -10,6 +10,7 @@
 //   Schedule           "every 300ms", "exponential backoff", "cron 0 3 * * *" as VALUES you can test (lesson 21)
 //   forkScoped         background fibers tied to a Scope: close the scope -> they are all interrupted
 // The app version of this lives in src/features/todos/jobs/todoJobs.ts (open /todos to watch it).
+// New to "backpressure"? Read docs/concepts/02-backpressure.md and run lesson 23 (bounded vs sliding vs dropping).
 import { Effect, Fiber, PubSub, Queue, Schedule, Stream } from "effect"
 
 const section = (title: string) => Effect.sync(() => console.log(`\n── ${title} ──`))
