@@ -1,6 +1,6 @@
 import { Effect, Fiber, Layer, Schema } from "effect"
 import { TestClock } from "effect/testing"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "@effect/vitest"
 import { UpstreamError } from "../effect/domain/errors"
 import { UserRepository } from "../effect/domain/userRepository"
 import { hedged, withResilience } from "../effect/infrastructure/resilience"
@@ -9,14 +9,15 @@ import { UpstreamHttp } from "../effect/infrastructure/upstreamHttp"
 import { UserRepositoryBatched } from "../effect/infrastructure/userRepositoryBatched"
 import { UserRepositoryCached } from "../effect/infrastructure/userRepositoryCached"
 
-const run = <A, E>(effect: Effect.Effect<A, E, never>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(TestClock.layer())))
+// EFFECT WAY: `it.effect` already provides TestClock (virtual time) and a Scope, so there is no hand-written
+// `run(effect)` helper that called runPromise with TestClock.layer() provided by hand.
+// DON'T: wrap tests in runPromise yourself: a failure becomes a bare rejected promise instead of a readable Cause.
 
 describe("resilience (virtual time: no real waiting)", () => {
   const policy = withResilience({ timeoutMs: 1000, retries: 3 })
 
-  it("retries transient failures with backoff and then succeeds", () =>
-    run(Effect.gen(function*() {
+  it.effect("retries transient failures with backoff and then succeeds", () =>
+    Effect.gen(function*() {
       let attempts = 0
       const flaky = Effect.suspend(() =>
         ++attempts < 3 ? Effect.fail(new UpstreamError({ message: "500" })) : Effect.succeed("ok")
@@ -25,19 +26,19 @@ describe("resilience (virtual time: no real waiting)", () => {
       yield* TestClock.adjust("10 seconds") // 100ms + 200ms of backoff, instantly
       expect(yield* Fiber.join(fiber)).toBe("ok")
       expect(attempts).toBe(3)
-    })))
+    }))
 
-  it("times out a hanging call", () =>
-    run(Effect.gen(function*() {
+  it.effect("times out a hanging call", () =>
+    Effect.gen(function*() {
       const fiber = yield* Effect.forkChild(policy(Effect.never as Effect.Effect<never, UpstreamError>).pipe(Effect.flip))
       yield* TestClock.adjust("10 seconds")
       expect((yield* Fiber.join(fiber))._tag).toBe("TimeoutError")
-    })))
+    }))
 })
 
 describe("cache layer", () => {
-  it("serves from cache within the TTL and reloads after it", () =>
-    run(Effect.gen(function*() {
+  it.effect("serves from cache within the TTL and reloads after it", () =>
+    Effect.gen(function*() {
       let calls = 0
       const Inner = Layer.succeed(UserRepository, UserRepository.of({
         getUser: (id) => Effect.sync(() => (calls++, { id, name: "ada", status: "active" as const })),
@@ -50,12 +51,12 @@ describe("cache layer", () => {
       yield* TestClock.adjust("6 seconds")
       yield* repo.getUser(1)
       expect(calls).toBe(2)
-    }).pipe(Effect.scoped)))
+    }))
 })
 
 describe("concurrency control", () => {
-  it("never runs more than `concurrency` tasks at once", () =>
-    run(Effect.gen(function*() {
+  it.effect("never runs more than `concurrency` tasks at once", () =>
+    Effect.gen(function*() {
       let inFlight = 0
       let max = 0
       const task = Effect.gen(function*() {
@@ -67,7 +68,7 @@ describe("concurrency control", () => {
       yield* TestClock.adjust("1 second")
       yield* Fiber.join(fiber)
       expect(max).toBe(2)
-    })))
+    }))
 
   it("mapLimit (standard) also bounds concurrency", async () => {
     let inFlight = 0
@@ -80,8 +81,8 @@ describe("concurrency control", () => {
     expect(max).toBe(2)
   })
 
-  it("hedged: slow first attempt loses to the second, and the loser is interrupted", () =>
-    run(Effect.gen(function*() {
+  it.effect("hedged: slow first attempt loses to the second, and the loser is interrupted", () =>
+    Effect.gen(function*() {
       let attempts = 0
       let interrupted = 0
       const call = Effect.suspend(() => {
@@ -96,12 +97,12 @@ describe("concurrency control", () => {
       expect(yield* Fiber.join(fiber)).toBe("attempt 2")
       expect(attempts).toBe(2)
       expect(interrupted).toBe(1)
-    })))
+    }))
 })
 
 describe("request batching", () => {
-  it("collapses 4 concurrent getUser calls (3 unique ids) into ONE upstream call", () =>
-    run(Effect.gen(function*() {
+  it.effect("collapses 4 concurrent getUser calls (3 unique ids) into ONE upstream call", () =>
+    Effect.gen(function*() {
       const urls: string[] = []
       // Fake transport: returns wire-shaped users for whatever ids were asked.
       const FakeHttp = Layer.succeed(UpstreamHttp, UpstreamHttp.of({
@@ -120,5 +121,5 @@ describe("request batching", () => {
       const users = yield* Fiber.join(fiber)
       expect(users.map((u) => u.id)).toEqual([1, 2, 1, 3])
       expect(urls).toEqual(["/api/upstream/users?ids=1,2,3"]) // one call, deduped
-    }).pipe(Effect.scoped)))
+    }))
 })

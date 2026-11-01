@@ -3,7 +3,7 @@
 // milliseconds, though it covers retries with exponential backoff and a job that runs every 2 minutes.
 import { Effect, Layer, Ref, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "@effect/vitest"
 import type { Todo } from "../domain/todo"
 import { TodoEvents, type TodoEvent } from "../domain/todoEvents"
 import { TodoRepository } from "../domain/todoRepository"
@@ -26,17 +26,14 @@ const scriptedNotifier = (failures: number, sent: Array<number>) => {
   }))
 }
 
-// Builds the jobs on top of fresh core services, then runs `test` with TestClock in charge of time.
-const runJobs = <A, E>(notifier: Layer.Layer<Notifier>, test: Effect.Effect<A, E, TodoRepository | TodoEvents>) =>
-  Effect.runPromise(
-    test.pipe(
-      Effect.provide(
-        Layer.mergeAll(NotificationWorkers, CleanupJob).pipe(
-          Layer.provide(notifier),
-          Layer.provideMerge(Layer.mergeAll(TodoRepositoryMemory, TodoEvents.layer)),
-        ),
-      ),
-      Effect.provide(TestClock.layer()),
+// The jobs on top of fresh core services. Each test provides it with its own scripted notifier.
+// EFFECT WAY: `it.effect` already puts TestClock in charge of time and gives a Scope, so there is no
+// runPromise helper and no hand-provided TestClock.layer(). A failing test prints the full Cause.
+const withJobs = (notifier: Layer.Layer<Notifier>) =>
+  Effect.provide(
+    Layer.mergeAll(NotificationWorkers, CleanupJob).pipe(
+      Layer.provide(notifier),
+      Layer.provideMerge(Layer.mergeAll(TodoRepositoryMemory, TodoEvents.layer)),
     ),
   )
 
@@ -50,9 +47,9 @@ const recordEvents = Effect.gen(function*() {
 })
 
 describe("notification workers (Queue + retry)", () => {
-  it("retries a flaky notifier with backoff and reports the attempt count", () => {
+  it.effect("retries a flaky notifier with backoff and reports the attempt count", () => {
     const sent: Array<number> = []
-    return runJobs(scriptedNotifier(2, sent), Effect.scoped(Effect.gen(function*() {
+    return Effect.gen(function*() {
       const seen = yield* recordEvents
       const repo = yield* TodoRepository
       const events = yield* TodoEvents
@@ -65,24 +62,24 @@ describe("notification workers (Queue + retry)", () => {
       yield* TestClock.adjust("1 second")
       expect(sent).toEqual([todo.id])
       expect((yield* Ref.get(seen)).find((e) => e._tag === "NotificationSent")).toMatchObject({ attempt: 3 })
-    })))
+    }).pipe(withJobs(scriptedNotifier(2, sent)))
   })
 
-  it("two workers process two jobs in parallel (400ms total, not 800ms)", () => {
+  it.effect("two workers process two jobs in parallel (400ms total, not 800ms)", () => {
     const sent: Array<number> = []
-    return runJobs(scriptedNotifier(0, sent), Effect.scoped(Effect.gen(function*() {
+    return Effect.gen(function*() {
       const repo = yield* TodoRepository
       const events = yield* TodoEvents
       for (const title of ["a", "b"]) yield* events.publish({ _tag: "TodoCreated", todo: yield* repo.create({ title }) })
       yield* TestClock.adjust("400 millis")
       expect(sent).toHaveLength(2)
-    })))
+    }).pipe(withJobs(scriptedNotifier(0, sent)))
   })
 })
 
 describe("cleanup job (Schedule.spaced)", () => {
-  it("deletes completed todos every 2 minutes, without waiting 2 real minutes", () =>
-    runJobs(scriptedNotifier(0, []), Effect.scoped(Effect.gen(function*() {
+  it.effect("deletes completed todos every 2 minutes, without waiting 2 real minutes", () =>
+    Effect.gen(function*() {
       const seen = yield* recordEvents
       const repo = yield* TodoRepository
       const done = yield* repo.create({ title: "done already" })
@@ -97,5 +94,5 @@ describe("cleanup job (Schedule.spaced)", () => {
       yield* TestClock.adjust("2 minutes") // runs again
       const runs = (yield* Ref.get(seen)).filter((e) => e._tag === "CleanupRan")
       expect(runs).toHaveLength(2)
-    }))))
+    }).pipe(withJobs(scriptedNotifier(0, []))))
 })

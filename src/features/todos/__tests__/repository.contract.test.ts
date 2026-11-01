@@ -9,7 +9,7 @@
 // The repository's own `sql.withTransaction` calls nest inside it as SAVEPOINTs automatically.
 import { Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/sql"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "@effect/vitest"
 import { TodoId } from "../domain/todo"
 import { TodoRepository } from "../domain/todoRepository"
 import { TodoRepositoryMemory } from "../infrastructure/todoRepositoryMemory"
@@ -17,9 +17,9 @@ import { MigrationsLive, PgLive, TodoRepositorySqlNoDeps } from "../infrastructu
 
 class Rollback extends Schema.TaggedError<Rollback>()("Rollback", {}) {}
 
-const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoRepository>) => Promise<unknown>) =>
+const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoRepository>) => Effect.Effect<unknown>) =>
   describe(`TodoRepository contract: ${name}`, () => {
-    it("creates a todo that is open and listed", () =>
+    it.effect("creates a todo that is open and listed", () =>
       run(Effect.gen(function*() {
         const repo = yield* TodoRepository
         const todo = yield* repo.create({ title: "contract" })
@@ -27,7 +27,7 @@ const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoReposi
         expect((yield* repo.list).map((t) => t.id)).toContain(todo.id)
       })))
 
-    it("toggles back and forth", () =>
+    it.effect("toggles back and forth", () =>
       run(Effect.gen(function*() {
         const repo = yield* TodoRepository
         const todo = yield* repo.create({ title: "toggle me" })
@@ -35,7 +35,7 @@ const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoReposi
         expect((yield* repo.toggle(todo.id)).completed).toBe(false)
       })))
 
-    it("fails with TodoNotFound for unknown ids (find and toggle)", () =>
+    it.effect("fails with TodoNotFound for unknown ids (find and toggle)", () =>
       run(Effect.gen(function*() {
         const repo = yield* TodoRepository
         const missing = TodoId.make(987654)
@@ -43,7 +43,7 @@ const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoReposi
         expect((yield* Effect.flip(repo.toggle(missing)))._tag).toBe("TodoNotFound")
       })))
 
-    it("deleteCompleted removes only completed todos", () =>
+    it.effect("deleteCompleted removes only completed todos", () =>
       run(Effect.gen(function*() {
         const repo = yield* TodoRepository
         const keep = yield* repo.create({ title: "keep" })
@@ -57,7 +57,9 @@ const contract = (name: string, run: <A, E>(test: Effect.Effect<A, E, TodoReposi
   })
 
 // Memory: a fresh layer per test.
-contract("memory", (test) => Effect.runPromise(test.pipe(Effect.provide(TodoRepositoryMemory))))
+// EFFECT WAY: `run` now returns an Effect and `it.effect` runs it (no runPromise), so a failing contract prints
+// the full Cause. Typed failures are turned into defects with orDie: a contract test should never fail typed.
+contract("memory", (test) => test.pipe(Effect.provide(TodoRepositoryMemory), Effect.orDie))
 
 // Postgres: only when DATABASE_URL is set.
 const PgRepo = TodoRepositorySqlNoDeps.pipe(
@@ -73,5 +75,5 @@ const inRolledBackTransaction = <A, E>(test: Effect.Effect<A, E, TodoRepository>
   }).pipe(Effect.provide(PgRepo), Effect.orDie)
 
 describe.skipIf(!process.env.DATABASE_URL)("postgres", () => {
-  contract("postgres", (test) => Effect.runPromise(inRolledBackTransaction(test)))
+  contract("postgres", inRolledBackTransaction)
 })
