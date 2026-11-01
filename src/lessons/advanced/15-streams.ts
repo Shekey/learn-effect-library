@@ -8,6 +8,9 @@
 // (a Stream turned into a ReadableStream response, cancelled when the client disconnects).
 //
 // DON'T: `Stream.runCollect` on unbounded data. Bound it first with `Stream.take`, or use `Stream.runForEach`.
+//
+// NEW TO STREAMING? Read docs/concepts/01-streaming.md and run lesson 22 (pnpm lesson 22) first: it explains
+// pull vs push, cold vs hot, chunks and the stream lifecycle from zero, before this lesson uses them.
 import { Effect, Stream } from "effect"
 
 const section = (title: string) => Effect.sync(() => console.log(`\n── ${title} ──`))
